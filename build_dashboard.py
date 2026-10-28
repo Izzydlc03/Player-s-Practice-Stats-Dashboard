@@ -134,8 +134,13 @@ def main():
     logo_uri = 'data:image/jpeg;base64,' + base64.b64encode(open(logo, 'rb').read()).decode() if os.path.exists(logo) else ''
     out = tpl.replace('/*__DATA__*/null', json.dumps(data, separators=(',', ':'))).replace('__LOGO__', logo_uri)
     open(os.path.join(HERE, 'Practice_Dashboard.html'), 'w', encoding='utf-8').write(out)
+    # index.html is the GitHub Pages entry point, so it gets a full document wrapper
+    page = ('<!doctype html>\n<html lang="en">\n<head>\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
+            + out + '\n</html>\n')
+    open(os.path.join(HERE, 'index.html'), 'w', encoding='utf-8').write(page)
     split = sum(1 for e in events if e['segments'])
-    print(f'Built Practice_Dashboard.html: {len(events)} files, {split} with scrimmage/special splits')
+    print(f'Built Practice_Dashboard.html and index.html: {len(events)} files, {split} with scrimmage/special splits')
 
 
 if __name__ == '__main__':
