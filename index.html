@@ -25,6 +25,9 @@
     --font-mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
   }
   *{ box-sizing:border-box; }
+  html, body{ margin:0; }
+  [hidden]{ display:none !important; }
+  img{ max-width:100%; }
   body{ background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased; }
   body::before{ content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:10; background:var(--topbar); }
   h1,h2,h3{ margin:0; text-wrap:balance; font-weight:800; letter-spacing:-.01em; }
