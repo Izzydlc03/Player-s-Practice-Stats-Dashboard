@@ -1,0 +1,600 @@
+<meta charset="utf-8">
+<title>Tritons Practice Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap">
+<style>
+  /* Layout: Player Overview shell — collapsible navy sidebar, white sticky topbar, grey canvas of white cards */
+  /* Always light, like the Player Overview and Line-Up dashboards */
+  :root, :root[data-theme="dark"]{
+    color-scheme:light;
+    --bg:#eaeaea; --surface:#FFFFFF; --surface-2:#FDFAF6; --surface-3:#E4EFE7;
+    --border:#DED2B8; --hairline:rgba(46,43,34,.06); --ink:#2E2B22; --ink-muted:#6B6656; --ink-faint:#9C9686;
+    --navy:#182B49; --navy-2:#1d3358; --navy-ink:#F2F4F8; --navy-muted:#9AA6C4; --navy-border:#2C3F63;
+    --gold:#C69214; --gold-chip:#E8C25A; --gold-chip-ink:#182B49;
+    --val:#182B49; --line-a:#264475; --line-b:#C69214; --heat:#264475;
+    --topbar:#FFFFFF; --topbar-rule:#182B49;
+    --good:#4C9A6A; --good-soft:#E3F3E7; --critical:#C0524A; --critical-soft:#F7E7E4; --warn:#B07A0A; --warn-soft:#FBF1DC;
+    --chart-grid:rgba(133,113,77,.24); --chart-axis:#85714D;
+    --radius:10px; --radius-sm:6px;
+    --shadow:0 1px 2px rgba(46,43,34,.06), 0 8px 24px -12px rgba(46,43,34,.12);
+    --font-body:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{ background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased; }
+  body::before{ content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:10; background:var(--topbar); }
+  h1,h2,h3{ margin:0; text-wrap:balance; font-weight:800; letter-spacing:-.01em; }
+  button{ font-family:inherit; }
+  ::selection{ background:var(--gold); color:var(--navy); }
+  .eyebrow{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-muted); }
+  .mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+
+  .app{ display:grid; grid-template-columns:236px 1fr; min-height:100vh; transition:grid-template-columns .22s ease;
+    background:linear-gradient(to right, var(--navy) 236px, var(--bg) 236px); }
+  .app.collapsed{ grid-template-columns:72px 1fr; background:linear-gradient(to right, var(--navy) 72px, var(--bg) 72px); }
+
+  /* Sidebar */
+  .sidebar{ background:var(--navy); border-right:1px solid var(--navy-border); display:flex; flex-direction:column; padding:20px 14px; gap:22px;
+    position:sticky; top:0; height:100vh; overflow:visible; }
+  .app.collapsed .sidebar{ padding-left:12px; padding-right:12px; }
+  .brand{ display:flex; align-items:center; gap:10px; padding:0 8px; }
+  .brand-mark{ width:34px; height:34px; border-radius:8px; background:var(--gold); flex:none; overflow:hidden; }
+  .brand-mark img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .brand-text{ line-height:1.2; }
+  .brand-text b{ display:block; font-size:13.5px; font-weight:800; color:var(--navy-ink); }
+  .brand-text span{ font-size:11px; color:var(--navy-muted); }
+  .sidebar-toggle{ position:absolute; top:22px; right:-13px; width:26px; height:26px; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface); box-shadow:var(--shadow); display:flex; align-items:center; justify-content:center; cursor:pointer;
+    color:var(--ink-muted); z-index:6; padding:0; }
+  .sidebar-toggle:hover{ color:var(--ink); }
+  .sidebar-toggle svg{ width:13px; height:13px; transition:transform .22s ease; }
+  .app.collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
+  nav.views{ display:flex; flex-direction:column; gap:2px; }
+  .nav-label{ padding:0 10px 6px; color:var(--navy-muted); }
+  .nav-btn{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; padding:9px 10px; border-radius:var(--radius-sm); border:none;
+    background:none; color:var(--navy-muted); font-size:13px; font-weight:600; cursor:pointer; }
+  .nav-btn svg{ width:18px; height:18px; flex:none; opacity:.85; }
+  .nav-btn:hover{ background:rgba(255,255,255,.08); color:var(--navy-ink); }
+  .nav-btn.active{ background:rgba(255,255,255,.14); color:var(--navy-ink); }
+  .nav-btn:focus-visible, .mini-btn:focus-visible, select:focus-visible, th.sortable:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+  .sidebar-foot{ margin-top:auto; padding:10px 8px; border-top:1px solid var(--navy-border); }
+  .sidebar-foot .eyebrow{ margin-bottom:4px; color:var(--navy-muted); }
+  .sidebar-foot p{ margin:0; font-size:11.5px; color:var(--navy-muted); opacity:.85; }
+  .app.collapsed .brand-text, .app.collapsed .nav-label, .app.collapsed .nav-btn span, .app.collapsed .sidebar-foot{ display:none; }
+  .app.collapsed .brand{ justify-content:center; padding:0; }
+  .app.collapsed .nav-btn{ justify-content:center; padding:9px 0; }
+
+  /* Main / topbar */
+  .main{ min-width:0; display:flex; flex-direction:column; }
+  .topbar{ position:sticky; top:env(safe-area-inset-top,0px); z-index:5; background:var(--topbar); border-bottom:1px solid var(--topbar-rule);
+    padding-block:18px; padding-left:max(28px, env(safe-area-inset-left,0px)); padding-right:max(28px, env(safe-area-inset-right,0px));
+    display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+  .topbar h1{ font-size:21px; }
+  .topbar .sub{ margin-top:3px; font-size:12.5px; color:var(--ink-muted); }
+  .topbar-meta{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .vslabel{ font-size:11px; font-weight:700; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.08em; }
+  .count-pill{ display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:var(--radius-sm); background:var(--navy-2);
+    color:var(--navy-ink); font-size:12.5px; font-weight:700; }
+  .count-pill b{ font-family:var(--font-mono); }
+
+  select{ appearance:none; -webkit-appearance:none; border:none; font:inherit; font-weight:600; font-size:12.5px; color:#e3e3e3;
+    background:var(--navy-2) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6"><path d="M0 0l5 6 5-6z" fill="%239AA6C4"/></svg>') no-repeat right 10px center;
+    padding:8px 28px 8px 12px; border-radius:var(--radius-sm); cursor:pointer; max-width:100%; }
+  select option{ color:#2E2B22; background:#fff; }
+
+  .view{ display:none; flex-direction:column; gap:20px; padding-block:22px 60px;
+    padding-left:max(28px, env(safe-area-inset-left,0px)); padding-right:max(28px, env(safe-area-inset-right,0px)); }
+  .view.active{ display:flex; }
+
+  /* Tiles */
+  .tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:10px; }
+  .tile{ background:var(--surface); border:1px solid var(--hairline); border-radius:var(--radius); padding:13px 14px; box-shadow:var(--shadow); }
+  .tile .eyebrow{ margin-bottom:6px; }
+  .tile .val{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:24px; font-weight:800; color:var(--val); }
+  .tile .delta{ margin-top:4px; font-size:11.5px; font-weight:700; color:var(--ink-muted); }
+  .delta.up{ color:var(--good); } .delta.down{ color:var(--critical); }
+
+  /* Cards */
+  .card{ background:var(--surface); border:1px solid var(--hairline); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px 18px 16px; min-width:0; }
+  .card-title{ display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; gap:18px; flex-wrap:wrap; }
+  .card-title h3{ font-size:14px; }
+  .card-title .hint{ font-size:11.5px; color:var(--ink-faint); font-weight:500; margin-top:4px; max-width:64ch; }
+  .card-actions{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+
+  .mini-toggle{ display:inline-flex; flex-wrap:wrap; align-items:center; gap:4px; padding:4px; border:1px solid var(--border); border-radius:999px; background:var(--surface-2); }
+  .mini-btn{ border:none; background:transparent; color:var(--ink-muted); cursor:pointer; border-radius:999px; padding:7px 12px; font-size:11.5px; font-weight:800;
+    letter-spacing:.04em; text-transform:uppercase; }
+  .mini-btn:hover{ color:var(--ink); }
+  .mini-btn.active{ background:var(--navy); color:var(--navy-ink); box-shadow:var(--shadow); }
+
+  .notice{ display:flex; gap:10px; align-items:flex-start; border-radius:var(--radius); padding:12px 14px; font-size:12.5px; color:var(--ink-muted); line-height:1.55;
+    background:var(--warn-soft); border:1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+  .notice.info{ background:var(--surface); border-color:var(--hairline); box-shadow:var(--shadow); }
+  .notice b{ color:var(--ink); }
+  .notice svg{ width:16px; height:16px; flex:none; margin-top:2px; color:var(--warn); }
+  .notice.info svg{ color:var(--line-a); }
+
+  /* Tables */
+  .table-wrap{ overflow-x:auto; border-radius:var(--radius-sm); border:1px solid var(--border); }
+  table{ width:100%; border-collapse:collapse; font-size:12.8px; }
+  thead th{ background:var(--surface-2); text-align:center; padding:9px 10px; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-muted); border-bottom:1px solid var(--border); white-space:nowrap; font-weight:700; }
+  thead th.sortable{ cursor:pointer; user-select:none; }
+  thead th.sortable:hover, thead th.sorted{ color:var(--ink); }
+  thead th.sorted::after{ content:attr(data-arrow); margin-left:4px; color:var(--gold); }
+  thead th:first-child, tbody td:first-child, tfoot td:first-child{ text-align:left; }
+  tbody td{ padding:9px 10px; border-bottom:1px solid var(--border); white-space:nowrap; text-align:center; font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+  tbody td:first-child{ font-family:var(--font-body); }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:var(--surface-2); }
+  tfoot td{ padding:9px 10px; text-align:center; font-weight:800; background:var(--surface-2); border-top:1px solid var(--border); white-space:nowrap;
+    font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+  tfoot td:first-child{ font-family:var(--font-body); }
+  .namecell{ display:flex; align-items:center; gap:9px; }
+  .jersey{ display:inline-flex; align-items:center; justify-content:center; width:26px; height:22px; border-radius:5px; background:var(--gold-chip);
+    font-family:var(--font-mono); font-weight:700; font-size:11.5px; color:var(--gold-chip-ink); flex:none; }
+  .rowname{ font-weight:800; color:var(--val); }
+  td.pts{ font-weight:800; color:var(--val); }
+  td.pts.hot{ color:var(--gold); }
+  .muted{ color:var(--ink-muted); }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:5px; }
+  .chip{ font-size:10.5px; font-weight:800; padding:4px 7px; border-radius:6px; line-height:1.2; white-space:nowrap; font-family:var(--font-body); }
+  .chip.seg{ background:var(--navy); color:var(--navy-ink); }
+  .chip.set{ background:var(--surface-3); color:var(--ink); }
+  .heat td.h{ font-weight:700; }
+
+  /* Chart */
+  .chart-wrap{ background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 8px 8px; }
+  svg.chart{ display:block; width:100%; height:auto; overflow:visible; }
+  .gridline{ stroke:var(--chart-grid); stroke-width:1; }
+  .axislabel{ fill:var(--chart-axis); font-size:10px; font-family:var(--font-mono); }
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; }
+  .legend-item{ display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--ink-muted); }
+  .swatch{ width:14px; height:3px; border-radius:2px; flex:none; }
+  .chart-head{ display:flex; align-items:center; justify-content:space-between; gap:12px 18px; flex-wrap:wrap; margin-bottom:12px; }
+  .chart-head .legend{ margin-top:0; }
+  .swatch.dashed{ background:repeating-linear-gradient(90deg,var(--line-b) 0 4px,transparent 4px 7px); }
+
+  .tooltip{ position:fixed; pointer-events:none; background:var(--ink); color:var(--bg); padding:6px 9px; border-radius:6px; font-size:11px; font-weight:700;
+    white-space:nowrap; transform:translate(-50%,-115%); opacity:0; transition:opacity .1s; z-index:90; box-shadow:var(--shadow); }
+  .tooltip.show{ opacity:1; }
+
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+  @media (max-width:760px){
+    .app, .app.collapsed{ grid-template-columns:1fr; background:var(--bg); }
+    .sidebar{ position:static; height:auto; flex-direction:row; flex-wrap:wrap; align-items:center; gap:10px;
+      padding-block:12px; padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); }
+    .sidebar-toggle, .nav-label, .sidebar-foot{ display:none; }
+    nav.views{ flex-direction:row; flex-wrap:wrap; }
+    .nav-btn{ width:auto; padding:7px 9px; }
+    .topbar, .view{ padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); }
+    .topbar{ position:static; }
+  }
+</style>
+
+<div class="app" id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><img src="__LOGO__" alt="UC San Diego Tritons logo"></div>
+      <div class="brand-text"><b>Big West WBB</b><span>Practice Dashboard</span></div>
+    </div>
+    <button class="sidebar-toggle" id="sidebarToggle" title="Collapse sidebar" aria-label="Collapse sidebar">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4l-6 6 6 6"/></svg>
+    </button>
+    <nav class="views">
+      <div class="eyebrow nav-label">Views</div>
+      <button class="nav-btn active" data-view="scrimmage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span>Scrimmage</span></button>
+      <button class="nav-btn" data-view="progress"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19 L9 13 L13 16 L20 7"/><path d="M15 7h5v5"/></svg><span>Player Progression</span></button>
+      <button class="nav-btn" data-view="compare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M2.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5M10.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/></svg><span>Player Comparison</span></button>
+      <button class="nav-btn" data-view="special"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 L10 8 L14 14 L20 4"/><circle cx="20" cy="4" r="1.5"/></svg><span>Special Execution</span></button>
+    </nav>
+    <div class="sidebar-foot"><div class="eyebrow">Data</div><p id="railFoot"></p></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div><h1 id="viewTitle">Scrimmage</h1><div class="sub" id="viewSub"></div></div>
+      <div class="topbar-meta"><span class="vslabel">Sample</span><span class="count-pill" id="badgeText"></span></div>
+    </header>
+
+    <!-- SCRIMMAGE -->
+    <section class="view active" id="view-scrimmage">
+      <div class="card">
+        <div class="card-title">
+          <div><h3>Scrimmage Box Score</h3><div class="hint" id="scrimDesc"></div></div>
+          <div class="card-actions">
+            <div class="mini-toggle" id="scrimMode"><button class="mini-btn active" data-mode="tot">Totals</button><button class="mini-btn" data-mode="avg">Per Practice</button></div>
+            <span class="vslabel">Select Scrimmage</span><select id="scrimSel" aria-label="Scrimmage"></select>
+          </div>
+        </div>
+        <div class="table-wrap"><table id="scrimTable"></table></div>
+      </div>
+      <div class="notice" id="scrimNotice"></div>
+    </section>
+
+    <!-- PROGRESSION -->
+    <section class="view" id="view-progress">
+      <div class="card">
+        <div class="card-title">
+          <div><h3 id="progTitle">Progression</h3><div class="hint">Practice-by-practice values for one player against the roster average.</div></div>
+          <div class="card-actions"><span class="vslabel">Select Player</span><select id="progPlayer" aria-label="Player"></select></div>
+        </div>
+        <div class="chart-head">
+          <div class="mini-toggle stat-toggle" id="progStat"></div>
+          <div class="legend"><div class="legend-item"><span class="swatch" style="background:var(--line-a)"></span><span id="legPlayer"></span></div><div class="legend-item"><span class="swatch dashed"></span>Roster average (players who logged the stat that day)</div></div>
+        </div>
+        <div class="chart-wrap"><svg class="chart" id="progChart" viewBox="0 0 860 280" role="img" aria-label="Player progression chart"></svg></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div><h3>Practice Log</h3><div class="hint" id="logDesc"></div></div></div>
+        <div class="table-wrap"><table id="progTable"></table></div>
+      </div>
+    </section>
+
+    <!-- COMPARISON -->
+    <section class="view" id="view-compare">
+      <div class="card">
+        <div class="card-title">
+          <div><h3 id="cmpTitle">Comparison</h3><div class="hint">Practice-by-practice values for two players. Gaps mean that player has no stats in that practice.</div></div>
+          <div class="card-actions">
+            <span class="vslabel">Player 1</span><select id="cmpA" aria-label="Player 1"></select>
+            <span class="vslabel">Player 2</span><select id="cmpB" aria-label="Player 2"></select>
+          </div>
+        </div>
+        <div class="chart-head">
+          <div class="mini-toggle stat-toggle" id="cmpStat"></div>
+          <div class="legend"><div class="legend-item"><span class="swatch" style="background:var(--line-a)"></span><span id="legA"></span></div><div class="legend-item"><span class="swatch" style="background:var(--line-b)"></span><span id="legB"></span></div></div>
+        </div>
+        <div class="chart-wrap"><svg class="chart" id="cmpChart" viewBox="0 0 860 280" role="img" aria-label="Player comparison chart"></svg></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div><h3>Head to Head</h3><div class="hint" id="cmpDesc"></div></div></div>
+        <div class="table-wrap"><table id="cmpTable"></table></div>
+      </div>
+    </section>
+
+    <!-- SPECIAL EXECUTION -->
+    <section class="view" id="view-special">
+      <div class="notice" id="specialNotice"></div>
+      <div class="card" id="specialBoxCard" hidden>
+        <div class="card-title"><div><h3>Special Execution Box Score</h3><div class="hint">Player stats tagged inside Special Situations segments.</div></div>
+          <div class="card-actions"><span class="vslabel">Select Practice</span><select id="specialSel" aria-label="Practice"></select></div></div>
+        <div class="table-wrap"><table id="specialTable"></table></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div><h3>Team Concept Tallies by Practice</h3><div class="hint">"+1" tags logged at the team level each practice. Darker cells mark the highest counts for that concept.</div></div></div>
+        <div class="table-wrap"><table id="conceptTable" class="heat"></table></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div><h3>Segments and Sets Tagged</h3><div class="hint">What each session was coded with. <span class="chip seg">Segments</span> are practice blocks; <span class="chip set">sets</span> are plays and out-of-bounds actions. Rep counts are not in the export yet.</div></div></div>
+        <div class="table-wrap"><table id="setsTable"></table></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function(){
+  "use strict";
+  var DATA = /*__DATA__*/null;
+  var $ = function(s){ return document.querySelector(s); };
+  var $$ = function(s,el){ return Array.prototype.slice.call((el||document).querySelectorAll(s)); };
+  var tip = $('#tooltip');
+  function showTip(e,html){ tip.innerHTML=html; tip.style.left=e.clientX+'px'; tip.style.top=e.clientY+'px'; tip.classList.add('show'); }
+  function hideTip(){ tip.classList.remove('show'); }
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+  var KEYS = ['p2m','p2a','p3m','p3a','ftm','fta','orb','drb','ast','stl','blk','tov','pf','chg'];
+  var events = DATA.events;
+  var practices = events.filter(function(e){ return e.type==='practice'; });
+  var scrims = events.filter(function(e){ return e.type==='scrimmage'; });
+
+  function fmtDate(iso){ if(!iso) return ''; var p=iso.split('-'); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+p[1]-1]+' '+(+p[2]); }
+  function evLabel(e){ return e.type==='scrimmage' ? 'vs '+e.opponent : fmtDate(e.date); }
+  function blank(){ var o={}; KEYS.forEach(function(k){o[k]=0;}); return o; }
+  function addInto(t,s){ KEYS.forEach(function(k){ t[k]+=(s[k]||0); }); return t; }
+  function derive(s){
+    var d = Object.assign(blank(), s);
+    d.fgm=d.p2m+d.p3m; d.fga=d.p2a+d.p3a; d.pts=2*d.p2m+3*d.p3m+d.ftm; d.reb=d.orb+d.drb;
+    d.fgp = d.fga ? d.fgm/d.fga : null; d.p3p = d.p3a ? d.p3m/d.p3a : null; d.ftp = d.fta ? d.ftm/d.fta : null;
+    return d;
+  }
+  function pnum(n){ return +n.split(' ')[0].slice(1); }
+  function pfirst(n){ return n.split(' ').slice(1).join(' '); }
+  function pct(v){ return v==null ? '–' : (v*100).toFixed(0)+'%'; }
+  function num(v,dp){ return dp ? v.toFixed(dp) : String(Math.round(v)); }
+  function nameCell(p){ return '<div class="namecell"><span class="jersey">'+pnum(p)+'</span><span class="rowname">'+esc(pfirst(p))+'</span></div>'; }
+
+  function aggregate(maps){
+    var out={}, games={};
+    maps.forEach(function(m){ Object.keys(m).forEach(function(p){ out[p]=addInto(out[p]||blank(), m[p]); games[p]=(games[p]||0)+1; }); });
+    return { stats:out, games:games };
+  }
+
+  /* -------- Box score table (shared) -------- */
+  var COLS = [
+    {k:'gp', l:'GP'}, {k:'pts', l:'PTS'}, {k:'fg', l:'FGM-A', sk:'fgm'}, {k:'fgp', l:'FG%'}, {k:'p3', l:'3PM-A', sk:'p3m'}, {k:'p3p', l:'3P%'},
+    {k:'ft', l:'FTM-A', sk:'ftm'}, {k:'orb', l:'OREB'}, {k:'drb', l:'DREB'}, {k:'reb', l:'REB'}, {k:'ast', l:'AST'},
+    {k:'stl', l:'STL'}, {k:'blk', l:'BLK'}, {k:'tov', l:'TO'}, {k:'pf', l:'PF'}
+  ];
+  var sortState = {};
+  function boxTable(el, agg, opts){
+    opts = opts||{};
+    var div = opts.avg ? function(p){ return agg.games[p]||1; } : function(){ return 1; };
+    var dp = opts.avg ? 1 : 0;
+    var cols = COLS.filter(function(c){ return opts.showGp || c.k!=='gp'; });
+    var st = sortState[el.id] || (sortState[el.id] = {k:'pts', dir:-1});
+    var rows = Object.keys(agg.stats).map(function(p){ return {p:p, d:derive(agg.stats[p]), n:div(p), gp:agg.games[p]||0}; });
+    function sv(r){
+      var c = cols.filter(function(c){return c.k===st.k;})[0]; var key = (c&&c.sk)||st.k;
+      if (key==='gp') return r.gp;
+      if (key==='name') return -pnum(r.p);
+      var v = r.d[key]; return v==null ? -1 : (/p$/.test(key) ? v : v/r.n);
+    }
+    rows.sort(function(a,b){ return (sv(a)-sv(b))*st.dir || pnum(a.p)-pnum(b.p); });
+    var maxPts = Math.max.apply(null, rows.map(function(r){ return r.d.pts/r.n; }).concat([0]));
+    function cell(c,d,n,gp){
+      switch(c.k){
+        case 'gp': return gp;
+        case 'fg': return num(d.fgm/n,dp)+'-'+num(d.fga/n,dp);
+        case 'p3': return num(d.p3m/n,dp)+'-'+num(d.p3a/n,dp);
+        case 'ft': return num(d.ftm/n,dp)+'-'+num(d.fta/n,dp);
+        case 'fgp': case 'p3p': return '<span class="'+(d[c.k]==null?'muted':'')+'">'+pct(d[c.k])+'</span>';
+        default: return num(d[c.k]/n,dp);
+      }
+    }
+    var arrow = st.dir<0?'↓':'↑';
+    var head = '<thead><tr><th class="sortable'+(st.k==='name'?' sorted':'')+'" data-k="name" data-arrow="'+arrow+'">Player</th>'+
+      cols.map(function(c){ return '<th class="sortable'+(st.k===c.k?' sorted':'')+'" data-k="'+c.k+'" data-arrow="'+arrow+'">'+c.l+'</th>'; }).join('')+'</tr></thead>';
+    var body = rows.map(function(r){
+      return '<tr><td>'+nameCell(r.p)+'</td>'+
+        cols.map(function(c){ return '<td class="'+(c.k==='pts'?'pts'+(r.d.pts/r.n===maxPts&&maxPts>0?' hot':''):'')+'">'+cell(c,r.d,r.n,r.gp)+'</td>'; }).join('')+'</tr>';
+    }).join('');
+    var foot = '';
+    if (!opts.avg && rows.length){
+      var t = derive(rows.reduce(function(a,r){ return addInto(a,r.d); }, blank()));
+      foot = '<tfoot><tr><td>Team</td>'+cols.map(function(c){ return '<td>'+(c.k==='gp'?'':cell(c,t,1,''))+'</td>'; }).join('')+'</tr></tfoot>';
+    }
+    el.innerHTML = head + '<tbody>'+(body||'<tr><td colspan="'+(cols.length+1)+'" class="muted" style="text-align:center;padding:22px">No player stats in this sample.</td></tr>')+'</tbody>' + foot;
+    $$('th.sortable', el).forEach(function(th){
+      th.addEventListener('click', function(){
+        var k = th.getAttribute('data-k');
+        if (st.k===k) st.dir*=-1; else { st.k=k; st.dir=-1; }
+        boxTable(el, agg, opts);
+      });
+    });
+  }
+
+  var warnIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 L22 20 H2 Z"/><path d="M12 10v4M12 17h.01"/></svg>';
+  var infoIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>';
+
+  /* -------- Scrimmage -------- */
+  // A practice contributes its scrimmage segment when one was exported, otherwise its whole-practice totals.
+  function practiceScrim(e){ return (e.segments && e.segments.scrimmage) || e.players; }
+  function isSplit(e){ return !!(e.segments && e.segments.scrimmage); }
+  var practiceScrimSeg = practices.filter(isSplit);
+  var groups = [];
+  var oppOpts = [];
+  if (scrims.length>1) oppOpts.push({v:'all', l:'All opponent scrimmages', evs:scrims.map(function(e){return e.players;}), unit:'scrimmage'});
+  scrims.forEach(function(e){ oppOpts.push({v:e.id, l:'vs '+e.opponent, evs:[e.players]}); });
+  var prOpts = [{v:'pall', l:'All practices ('+practices.length+')', evs:practices.map(practiceScrim), unit:'practice'}]
+    .concat(practices.slice().reverse().map(function(e){
+      return {v:'p-'+e.id, l:fmtDate(e.date)+(isSplit(e)?' · scrimmage segment':' · full practice'), evs:[practiceScrim(e)], ev:e};
+    }));
+  groups.push({l:'Opponent scrimmages', opts:oppOpts}, {l:'Practices', opts:prOpts});
+  var scrimOpts = oppOpts.concat(prOpts);
+  $('#scrimSel').innerHTML = groups.map(function(g){ return '<optgroup label="'+g.l+'">'+g.opts.map(function(o){ return '<option value="'+o.v+'">'+esc(o.l)+'</option>'; }).join('')+'</optgroup>'; }).join('');
+  var scrimMode = 'tot';
+  function renderScrim(){
+    var o = scrimOpts.filter(function(x){ return x.v===$('#scrimSel').value; })[0];
+    if (!o) return;
+    var multi = o.evs.length>1;
+    $('#scrimMode').hidden = !multi;
+    var avg = multi && scrimMode==='avg';
+    $$('#scrimMode .mini-btn')[1].textContent = o.unit==='scrimmage' ? 'Per Scrimmage' : 'Per Practice';
+    boxTable($('#scrimTable'), aggregate(o.evs), {avg:avg, showGp:multi});
+    var desc;
+    if (o.ev) desc = isSplit(o.ev) ? 'Scrimmage segment only, '+fmtDate(o.ev.date)+'.' : 'Whole-practice totals for '+fmtDate(o.ev.date)+'. The scrimmage section is not split out of this file yet.';
+    else if (o.v==='pall') desc = (avg ? 'Per-practice averages' : 'Totals')+' across every practice. Uses the scrimmage segment where it was exported ('+(practiceScrimSeg.map(function(e){return fmtDate(e.date);}).join(', ')||'none')+') and whole-practice totals elsewhere.';
+    else desc = multi ? (avg ? 'Per-scrimmage averages.' : 'Combined totals.') : 'Totals for '+o.l+'.';
+    $('#scrimDesc').textContent = desc+' Click any column to sort.';
+  }
+  $('#scrimSel').addEventListener('change', renderScrim);
+  $$('#scrimMode .mini-btn').forEach(function(b){ b.addEventListener('click', function(){
+    $$('#scrimMode .mini-btn').forEach(function(x){ x.classList.remove('active'); }); b.classList.add('active'); scrimMode=b.getAttribute('data-mode'); renderScrim(); }); });
+  $('#scrimNotice').innerHTML = warnIcon+'<div><b>Scrimmage sections are split out for '+(practiceScrimSeg.map(function(e){ return fmtDate(e.date); }).join(', ')||'no practices')+' only.</b> Every practice file has a "Scrimmage" segment tagged, but the export does not cross it with player stats, so the other '+(practices.length-practiceScrimSeg.length)+' practices show whole-practice totals. Add a <b>MM.DD.YY-Segments.csv</b> file for a practice and re-run <b>build_dashboard.py</b> to split it.</div>';
+
+  /* -------- Special execution -------- */
+  var specialPr = practices.filter(function(e){ return e.segments && e.segments.special; });
+  if (specialPr.length){
+    $('#specialBoxCard').hidden = false;
+    var sOpts = (specialPr.length>1?[{v:'all', l:'All practices'}]:[]).concat(specialPr.map(function(e){ return {v:e.id, l:fmtDate(e.date)}; }));
+    $('#specialSel').innerHTML = sOpts.map(function(o){ return '<option value="'+o.v+'">'+esc(o.l)+'</option>'; }).join('');
+    var rs = function(){ var v=$('#specialSel').value; var evs = specialPr.filter(function(e){ return v==='all'||e.id===v; });
+      boxTable($('#specialTable'), aggregate(evs.map(function(e){ return e.segments.special; })), {showGp:v==='all'}); };
+    $('#specialSel').addEventListener('change', rs); rs();
+    $('#specialNotice').className='notice info';
+    $('#specialNotice').innerHTML = infoIcon+'<div><b>Special execution stats are available for '+specialPr.map(function(e){ return fmtDate(e.date); }).join(', ')+'.</b> The other '+(practices.length-specialPr.length)+' practice files only have whole-practice totals, so they are not included in this box score.</div>';
+  } else {
+    $('#specialNotice').innerHTML = warnIcon+'<div><b>The CSVs do not split special execution from the rest of practice.</b> Every segment and set row is zero for player stats, so each player stat only exists as a whole-practice total.</div>';
+  }
+  (function(){
+    var names = [];
+    practices.forEach(function(e){ Object.keys(e.concepts).forEach(function(c){ if (names.indexOf(c)<0) names.push(c); }); });
+    var order = ['POB','Paint Touch','Trans Scores','Foul - FT','Uncontested 2','Uncontested 3'];
+    names.sort(function(a,b){ var ia=order.indexOf(a), ib=order.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
+    var max = {}; names.forEach(function(c){ max[c] = Math.max.apply(null, practices.map(function(e){ return e.concepts[c]||0; })); });
+    var html = '<thead><tr><th>Practice</th>'+names.map(function(c){ return '<th>'+esc(c)+'</th>'; }).join('')+'</tr></thead><tbody>';
+    html += practices.map(function(e){
+      return '<tr><td class="rowname">'+fmtDate(e.date)+'</td>'+names.map(function(c){
+        var v = e.concepts[c]; if (v==null) return '<td class="muted">–</td>';
+        var a = max[c] ? Math.round(v/max[c]*30) : 0;
+        return '<td class="h" style="background:color-mix(in srgb, var(--heat) '+a+'%, transparent)">'+v+'</td>';
+      }).join('')+'</tr>';
+    }).join('');
+    $('#conceptTable').innerHTML = html+'</tbody>';
+    $('#setsTable').innerHTML = '<thead><tr><th>Session</th><th style="text-align:left">Segments</th><th style="text-align:left">Sets tagged</th></tr></thead><tbody>'+
+      events.map(function(e){
+        return '<tr><td class="rowname">'+esc(evLabel(e))+'</td><td style="text-align:left;white-space:normal"><div class="chips">'+
+          (e.drills.map(function(d){ return '<span class="chip seg">'+esc(d)+'</span>'; }).join('')||'<span class="muted">–</span>')+'</div></td>'+
+          '<td style="text-align:left;white-space:normal;min-width:260px"><div class="chips">'+(e.sets.map(function(d){ return '<span class="chip set">'+esc(d)+'</span>'; }).join('')||'<span class="muted">–</span>')+'</div></td></tr>';
+      }).join('')+'</tbody>';
+  })();
+
+  /* -------- Shared line chart -------- */
+  var STATS = [
+    {k:'pts', l:'PTS'}, {k:'fgp', l:'FG%', pct:true, att:'fga'}, {k:'p3p', l:'3P%', pct:true, att:'p3a'},
+    {k:'reb', l:'REB'}, {k:'ast', l:'AST'}, {k:'stl', l:'STL'}, {k:'tov', l:'TO', lowGood:true}
+  ];
+  function statVal(d, s){ if (s.pct) return d[s.att] ? d[s.k] : null; return d[s.k]; }
+  function fmtStat(v, s){ return v==null ? '–' : (s.pct ? pct(v) : (Math.round(v)===v ? String(v) : v.toFixed(1))); }
+  function statToggle(el, onPick){
+    var cur = 'pts';
+    el.innerHTML = STATS.map(function(s){ return '<button class="mini-btn'+(s.k===cur?' active':'')+'" data-k="'+s.k+'">'+s.l+'</button>'; }).join('');
+    $$('.mini-btn', el).forEach(function(b){ b.addEventListener('click', function(){
+      $$('.mini-btn', el).forEach(function(x){ x.classList.remove('active'); }); b.classList.add('active'); onPick(b.getAttribute('data-k')); }); });
+  }
+  // series: [{vals:[v|null per practice], color, dashed, name, marks}]
+  function drawLines(svg, s, series){
+    var W=860,H=280,L=44,R=18,T=22,B=34, n=practices.length;
+    var vals = [].concat.apply([], series.map(function(x){ return x.vals; })).filter(function(v){ return v!=null; });
+    var ymax = s.pct ? 1 : Math.max(4, Math.ceil(Math.max.apply(null, vals.concat([0]))*1.15));
+    var step = s.pct ? 0.25 : (ymax<=8?2:ymax<=20?5:10);
+    if (!s.pct) ymax = Math.ceil(ymax/step)*step;
+    var xs = function(i){ return L + (n>1 ? i*(W-L-R)/(n-1) : (W-L-R)/2); };
+    var ys = function(v){ return T + (1-v/ymax)*(H-T-B); };
+    var g = '';
+    for (var y=0; y<=ymax+1e-9; y+=step){
+      g += '<line class="gridline" x1="'+L+'" x2="'+(W-R)+'" y1="'+ys(y)+'" y2="'+ys(y)+'"/>'+
+        '<text class="axislabel" x="'+(L-8)+'" y="'+(ys(y)+4)+'" text-anchor="end">'+(s.pct?Math.round(y*100)+'%':y)+'</text>';
+    }
+    practices.forEach(function(e,i){ g += '<text class="axislabel" x="'+xs(i)+'" y="'+(H-12)+'" text-anchor="middle">'+fmtDate(e.date)+'</text>'; });
+    series.forEach(function(sr){
+      var d='', pen=false;
+      sr.vals.forEach(function(v,i){ if (v==null){ pen=false; return; } d += (pen?'L':'M')+xs(i).toFixed(1)+' '+ys(v).toFixed(1)+' '; pen=true; });
+      g += '<path d="'+d+'" fill="none" stroke="'+sr.color+'" stroke-width="'+(sr.dashed?1.8:2.6)+'"'+(sr.dashed?' stroke-dasharray="5 4"':'')+' stroke-linejoin="round" stroke-linecap="round"/>';
+    });
+    series.forEach(function(sr, si){
+      if (!sr.marks) return;
+      var lastI=-1; sr.vals.forEach(function(v,i){ if (v!=null) lastI=i; });
+      sr.vals.forEach(function(v,i){
+        if (v==null) return;
+        g += '<circle cx="'+xs(i)+'" cy="'+ys(v)+'" r="'+(i===lastI?5.5:3.8)+'" fill="'+(i===lastI?sr.color:'var(--surface)')+'" stroke="'+sr.color+'" stroke-width="2"/>';
+        g += '<circle class="hit" data-s="'+si+'" data-i="'+i+'" cx="'+xs(i)+'" cy="'+ys(v)+'" r="11" fill="transparent" style="cursor:pointer"/>';
+      });
+    });
+    svg.innerHTML = g;
+    $$('.hit', svg).forEach(function(c){
+      var i = +c.getAttribute('data-i');
+      c.addEventListener('mousemove', function(ev){
+        showTip(ev, '<b>'+fmtDate(practices[i].date)+'</b> · '+s.l+' · '+series.map(function(sr){ return esc(sr.name)+' '+fmtStat(sr.vals[i], s); }).join(' · '));
+      });
+      c.addEventListener('mouseleave', hideTip);
+    });
+  }
+  function seriesFor(p, s){ return practices.map(function(e){ return e.players[p] ? statVal(derive(e.players[p]), s) : null; }); }
+
+  var allPlayers = {};
+  practices.forEach(function(e){ Object.keys(e.players).forEach(function(p){ allPlayers[p]=1; }); });
+  var plist = Object.keys(allPlayers).sort(function(a,b){ return pnum(a)-pnum(b); });
+  var playerOpts = plist.map(function(p){ return '<option value="'+esc(p)+'">'+esc(p)+'</option>'; }).join('');
+  var seasonPts = function(p){ return practices.reduce(function(t,e){ return t+(e.players[p]?derive(e.players[p]).pts:0); },0); };
+  var byPts = plist.slice().sort(function(a,b){ return seasonPts(b)-seasonPts(a); });
+
+  /* -------- Player progression -------- */
+  var progStat = 'pts';
+  $('#progPlayer').innerHTML = playerOpts;
+  $('#progPlayer').value = byPts[0];
+  statToggle($('#progStat'), function(k){ progStat=k; renderProg(); });
+  $('#progPlayer').addEventListener('change', renderProg);
+  function renderProg(){
+    var p = $('#progPlayer').value, s = STATS.filter(function(x){ return x.k===progStat; })[0];
+    var avg = practices.map(function(e){
+      var o = Object.keys(e.players).map(function(q){ return statVal(derive(e.players[q]), s); }).filter(function(v){ return v!=null; });
+      return o.length ? o.reduce(function(a,b){return a+b;},0)/o.length : null;
+    });
+    $('#progTitle').textContent = pfirst(p)+' · '+s.l+' by Practice';
+    $('#legPlayer').textContent = p;
+    drawLines($('#progChart'), s, [
+      {vals:avg, color:'var(--line-b)', dashed:true, name:'Roster avg'},
+      {vals:seriesFor(p, s), color:'var(--line-a)', marks:true, name:pfirst(p)}
+    ]);
+    var logged = practices.filter(function(e){ return e.players[p]; }).length;
+    var cols = COLS.filter(function(c){ return c.k!=='gp'; });
+    $('#progTable').innerHTML = '<thead><tr><th>Practice</th>'+cols.map(function(c){ return '<th>'+c.l+'</th>'; }).join('')+'</tr></thead><tbody>'+
+      practices.slice().reverse().map(function(e){
+        if (!e.players[p]) return '<tr><td class="rowname">'+fmtDate(e.date)+'</td><td colspan="'+cols.length+'" class="muted" style="text-align:left;font-family:var(--font-body)">No stats logged</td></tr>';
+        var d = derive(e.players[p]);
+        return '<tr><td class="rowname">'+fmtDate(e.date)+'</td>'+cols.map(function(c){
+          var v = c.k==='fg'? d.fgm+'-'+d.fga : c.k==='p3'? d.p3m+'-'+d.p3a : c.k==='ft'? d.ftm+'-'+d.fta : (c.k==='fgp'||c.k==='p3p')? pct(d[c.k]) : d[c.k];
+          return '<td'+(c.k==='pts'?' class="pts"':'')+'>'+v+'</td>'; }).join('')+'</tr>';
+      }).join('')+'</tbody>';
+    $('#logDesc').textContent = 'Every practice file, newest first. '+pfirst(p)+' has stats in '+logged+' of '+practices.length+'.';
+  }
+
+  /* -------- Player comparison -------- */
+  var cmpStat = 'pts';
+  $('#cmpA').innerHTML = playerOpts; $('#cmpB').innerHTML = playerOpts;
+  $('#cmpA').value = byPts[0]; $('#cmpB').value = byPts[1] || byPts[0];
+  statToggle($('#cmpStat'), function(k){ cmpStat=k; renderCmp(); });
+  $('#cmpA').addEventListener('change', renderCmp); $('#cmpB').addEventListener('change', renderCmp);
+  function renderCmp(){
+    var a = $('#cmpA').value, b = $('#cmpB').value, s = STATS.filter(function(x){ return x.k===cmpStat; })[0];
+    var va = seriesFor(a, s), vb = seriesFor(b, s);
+    $('#cmpTitle').textContent = pfirst(a)+' vs '+pfirst(b)+' · '+s.l+' by Practice';
+    $('#legA').textContent = a; $('#legB').textContent = b;
+    drawLines($('#cmpChart'), s, [
+      {vals:vb, color:'var(--line-b)', marks:true, name:pfirst(b)},
+      {vals:va, color:'var(--line-a)', marks:true, name:pfirst(a)}
+    ]);
+    // Head-to-head totals table, both players over every practice
+    function tot(p){ return derive(practices.reduce(function(t,e){ return e.players[p] ? addInto(t, e.players[p]) : t; }, blank())); }
+    function gp(p){ return practices.filter(function(e){ return e.players[p]; }).length || 1; }
+    var ta = tot(a), tb = tot(b), ga = gp(a), gb = gp(b);
+    var rows = [
+      ['Practices logged', ga, gb, false, false],
+      ['PTS / practice', ta.pts/ga, tb.pts/gb, false, false],
+      ['FG%', ta.fgp, tb.fgp, true, false],
+      ['3P%', ta.p3p, tb.p3p, true, false],
+      ['FT%', ta.ftp, tb.ftp, true, false],
+      ['REB / practice', ta.reb/ga, tb.reb/gb, false, false],
+      ['AST / practice', ta.ast/ga, tb.ast/gb, false, false],
+      ['STL / practice', ta.stl/ga, tb.stl/gb, false, false],
+      ['TO / practice', ta.tov/ga, tb.tov/gb, false, true]
+    ];
+    function f(v, isPct){ return v==null ? '–' : isPct ? pct(v) : (Math.round(v)===v ? String(v) : v.toFixed(1)); }
+    $('#cmpTable').innerHTML = '<thead><tr><th>Stat</th><th>'+esc(pfirst(a))+'</th><th>'+esc(pfirst(b))+'</th></tr></thead><tbody>'+
+      rows.map(function(r){
+        var lead = (r[1]==null||r[2]==null||r[1]===r[2]||r[0]==='Practices logged') ? 0 : ((r[1]>r[2]) !== r[4] ? 1 : 2);
+        return '<tr><td class="rowname">'+r[0]+'</td><td class="'+(lead===1?'pts':'')+'">'+f(r[1],r[3])+'</td><td class="'+(lead===2?'pts':'')+'">'+f(r[2],r[3])+'</td></tr>';
+      }).join('')+'</tbody>';
+    $('#cmpDesc').textContent = 'Whole-practice numbers across all '+practices.length+' practice files. Bold marks the better value.';
+  }
+
+  /* -------- Shell -------- */
+  var VIEWS = {
+    scrimmage:['Scrimmage','Opponent scrimmages and practice scrimmage segments'],
+    special:['Special Execution','Special situations, sets and team concept tallies'],
+    progress:['Player Progression','How each player’s box score has moved practice to practice'],
+    compare:['Player Comparison','Two players side by side, practice by practice']
+  };
+  function show(v){
+    if (!VIEWS[v]) v='scrimmage';
+    $$('.nav-btn').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-view')===v); });
+    $$('.view').forEach(function(s){ s.classList.toggle('active', s.id==='view-'+v); });
+    $('#viewTitle').textContent = VIEWS[v][0]; $('#viewSub').textContent = VIEWS[v][1];
+    try{ history.replaceState(null,'','#'+v); }catch(e){}
+  }
+  $$('.nav-btn').forEach(function(b){ b.addEventListener('click', function(){ show(b.getAttribute('data-view')); }); });
+  $('#sidebarToggle').addEventListener('click', function(){ $('#app').classList.toggle('collapsed'); });
+  var first = practices[0], last = practices[practices.length-1];
+  $('#badgeText').innerHTML = '<b>'+practices.length+'</b> practices · <b>'+scrims.length+'</b> scrimmages';
+  $('#railFoot').textContent = fmtDate(first.date)+' – '+fmtDate(last.date)+', 2026 · built '+DATA.built+' from '+events.length+' CSV exports.';
+
+  renderScrim(); renderProg(); renderCmp();
+  show((location.hash||'').slice(1));
+  window.addEventListener('hashchange', function(){ show(location.hash.slice(1)); });
+})();
+</script>
