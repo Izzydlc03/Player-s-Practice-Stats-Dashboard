@@ -190,7 +190,7 @@
       <button class="nav-btn active" data-view="scrimmage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span>Scrimmage</span></button>
       <button class="nav-btn" data-view="progress"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19 L9 13 L13 16 L20 7"/><path d="M15 7h5v5"/></svg><span>Player Progression</span></button>
       <button class="nav-btn" data-view="compare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M2.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5M10.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/></svg><span>Player Comparison</span></button>
-      <button class="nav-btn" data-view="special"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 L10 8 L14 14 L20 4"/><circle cx="20" cy="4" r="1.5"/></svg><span>Special Execution</span></button>
+      <button class="nav-btn" data-view="special"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 L10 8 L14 14 L20 4"/><circle cx="20" cy="4" r="1.5"/></svg><span>Special Situations</span></button>
     </nav>
     <div class="sidebar-foot"><div class="eyebrow">Data</div><p id="railFoot"></p></div>
   </aside>
@@ -256,11 +256,11 @@
       </div>
     </section>
 
-    <!-- SPECIAL EXECUTION -->
+    <!-- SPECIAL SITUATIONS -->
     <section class="view" id="view-special">
       <div class="notice" id="specialNotice"></div>
       <div class="card" id="specialBoxCard" hidden>
-        <div class="card-title"><div><h3>Special Execution Box Score</h3><div class="hint">Player stats tagged inside Special Situations segments.</div></div>
+        <div class="card-title"><div><h3>Special Situations Box Score</h3><div class="hint" id="specialDesc"></div></div>
           <div class="card-actions"><span class="vslabel">Select Practice</span><select id="specialSel" aria-label="Practice"></select></div></div>
         <div class="table-wrap"><table id="specialTable"></table></div>
       </div>
@@ -402,19 +402,33 @@
   $('#scrimSel').addEventListener('change', renderScrim);
   $('#scrimNotice').innerHTML = warnIcon+'<div><b>Scrimmage sections are split out for '+(practiceScrimSeg.map(function(e){ return fmtDate(e.date); }).join(', ')||'no practices')+' only.</b> Every practice file has a "Scrimmage" segment tagged, but the export does not cross it with player stats, so the other '+(practices.length-practiceScrimSeg.length)+' practices show whole-practice totals. Add a <b>MM.DD.YY-Segments.csv</b> file for a practice and re-run <b>build_dashboard.py</b> to split it.</div>';
 
-  /* -------- Special execution -------- */
-  var specialPr = practices.filter(function(e){ return e.segments && e.segments.special; });
+  /* -------- Special situations -------- */
+  // Practices that tag a special situations segment; use the exported split when there is one, otherwise whole-practice totals.
+  function specialSplit(e){ return !!(e.segments && e.segments.special); }
+  var specialPr = practices.filter(function(e){ return specialSplit(e) || e.drills.some(function(d){ return /special/i.test(d); }); });
+  function specialStats(e){ return specialSplit(e) ? e.segments.special : e.players; }
   if (specialPr.length){
     $('#specialBoxCard').hidden = false;
-    var sOpts = (specialPr.length>1?[{v:'all', l:'All practices'}]:[]).concat(specialPr.map(function(e){ return {v:e.id, l:fmtDate(e.date)}; }));
+    var sOpts = (specialPr.length>1?[{v:'all', l:'All special situations practices ('+specialPr.length+')'}]:[])
+      .concat(specialPr.slice().reverse().map(function(e){ return {v:e.id, l:fmtDate(e.date)+(specialSplit(e)?' · special situations segment':' · full practice')}; }));
     $('#specialSel').innerHTML = sOpts.map(function(o){ return '<option value="'+o.v+'">'+esc(o.l)+'</option>'; }).join('');
-    var rs = function(){ var v=$('#specialSel').value; var evs = specialPr.filter(function(e){ return v==='all'||e.id===v; });
-      boxTable($('#specialTable'), aggregate(evs.map(function(e){ return e.segments.special; })), {showGp:v==='all'}); };
+    var rs = function(){
+      var v=$('#specialSel').value; var evs = specialPr.filter(function(e){ return v==='all'||e.id===v; });
+      boxTable($('#specialTable'), aggregate(evs.map(specialStats)), {showGp:v==='all'});
+      var one = evs.length===1 ? evs[0] : null;
+      $('#specialDesc').textContent = one
+        ? (specialSplit(one) ? 'Special situations segment only, '+fmtDate(one.date)+'.' : 'Whole-practice totals for '+fmtDate(one.date)+'. The special situations section is not split out of this file yet.')
+        : 'Totals across '+evs.length+' practices. Uses the special situations segment where it was exported and whole-practice totals elsewhere.';
+    };
     $('#specialSel').addEventListener('change', rs); rs();
-    $('#specialNotice').className='notice info';
-    $('#specialNotice').innerHTML = infoIcon+'<div><b>Special execution stats are available for '+specialPr.map(function(e){ return fmtDate(e.date); }).join(', ')+'.</b> The other '+(practices.length-specialPr.length)+' practice files only have whole-practice totals, so they are not included in this box score.</div>';
+    var split = specialPr.filter(specialSplit), full = specialPr.filter(function(e){ return !specialSplit(e); });
+    var dl = function(a){ return a.map(function(e){ return fmtDate(e.date); }).join(' and '); };
+    $('#specialNotice').innerHTML = (full.length?warnIcon:infoIcon)+'<div><b>'+specialPr.length+' practices tag a Special Situations segment: '+specialPr.map(function(e){ return fmtDate(e.date); }).join(', ')+'.</b> '+
+      (split.length ? dl(split)+' shows only the special situations segment. ' : '')+
+      (full.length ? dl(full)+' show'+(full.length>1?'':'s')+' whole-practice totals because the export does not split that section out yet. Add a <b>MM.DD.YY-Segments.csv</b> file for '+(full.length>1?'them':'it')+' and re-run <b>build_dashboard.py</b> to split it.' : '')+'</div>';
+    if (!full.length) $('#specialNotice').className='notice info';
   } else {
-    $('#specialNotice').innerHTML = warnIcon+'<div><b>The CSVs do not split special execution from the rest of practice.</b> Every segment and set row is zero for player stats, so each player stat only exists as a whole-practice total.</div>';
+    $('#specialNotice').innerHTML = warnIcon+'<div><b>No practice tags a Special Situations segment.</b></div>';
   }
   (function(){
     var names = [];
@@ -572,7 +586,7 @@
   /* -------- Shell -------- */
   var VIEWS = {
     scrimmage:['Scrimmage','Opponent scrimmages and practice scrimmage segments'],
-    special:['Special Execution','Special situations, sets and team concept tallies'],
+    special:['Special Situations','Special situations, sets and team concept tallies'],
     progress:['Player Progression','How each player’s box score has moved practice to practice'],
     compare:['Player Comparison','Two players side by side, practice by practice']
   };
