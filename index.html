@@ -211,7 +211,6 @@
         <div class="card-title">
           <div><h3>Scrimmage Box Score</h3><div class="hint" id="scrimDesc"></div></div>
           <div class="card-actions">
-            <div class="mini-toggle" id="scrimMode"><button class="mini-btn active" data-mode="tot">Totals</button><button class="mini-btn" data-mode="avg">Per Practice</button></div>
             <span class="vslabel">Select Scrimmage</span><select id="scrimSel" aria-label="Scrimmage"></select>
           </div>
         </div>
@@ -393,24 +392,18 @@
   groups.push({l:'Opponent scrimmages', opts:oppOpts}, {l:'Practices', opts:prOpts});
   var scrimOpts = oppOpts.concat(prOpts);
   $('#scrimSel').innerHTML = groups.map(function(g){ return '<optgroup label="'+g.l+'">'+g.opts.map(function(o){ return '<option value="'+o.v+'">'+esc(o.l)+'</option>'; }).join('')+'</optgroup>'; }).join('');
-  var scrimMode = 'tot';
   function renderScrim(){
     var o = scrimOpts.filter(function(x){ return x.v===$('#scrimSel').value; })[0];
     if (!o) return;
     var multi = o.evs.length>1;
-    $('#scrimMode').hidden = !multi;
-    var avg = multi && scrimMode==='avg';
-    $$('#scrimMode .mini-btn')[1].textContent = o.unit==='scrimmage' ? 'Per Scrimmage' : 'Per Practice';
-    boxTable($('#scrimTable'), aggregate(o.evs), {avg:avg, showGp:multi});
+    boxTable($('#scrimTable'), aggregate(o.evs), {showGp:multi});
     var desc;
     if (o.ev) desc = isSplit(o.ev) ? 'Scrimmage segment only, '+fmtDate(o.ev.date)+'.' : 'Whole-practice totals for '+fmtDate(o.ev.date)+'. The scrimmage section is not split out of this file yet.';
-    else if (o.v==='pall') desc = (avg ? 'Per-practice averages' : 'Totals')+' across every practice. Uses the scrimmage segment where it was exported ('+(practiceScrimSeg.map(function(e){return fmtDate(e.date);}).join(', ')||'none')+') and whole-practice totals elsewhere.';
-    else desc = multi ? (avg ? 'Per-scrimmage averages.' : 'Combined totals.') : 'Totals for '+o.l+'.';
+    else if (o.v==='pall') desc = 'Totals across every practice. Uses the scrimmage segment where it was exported ('+(practiceScrimSeg.map(function(e){return fmtDate(e.date);}).join(', ')||'none')+') and whole-practice totals elsewhere.';
+    else desc = multi ? 'Combined totals.' : 'Totals for '+o.l+'.';
     $('#scrimDesc').textContent = desc+' Click any column to sort.';
   }
   $('#scrimSel').addEventListener('change', renderScrim);
-  $$('#scrimMode .mini-btn').forEach(function(b){ b.addEventListener('click', function(){
-    $$('#scrimMode .mini-btn').forEach(function(x){ x.classList.remove('active'); }); b.classList.add('active'); scrimMode=b.getAttribute('data-mode'); renderScrim(); }); });
   $('#scrimNotice').innerHTML = warnIcon+'<div><b>Scrimmage sections are split out for '+(practiceScrimSeg.map(function(e){ return fmtDate(e.date); }).join(', ')||'no practices')+' only.</b> Every practice file has a "Scrimmage" segment tagged, but the export does not cross it with player stats, so the other '+(practices.length-practiceScrimSeg.length)+' practices show whole-practice totals. Add a <b>MM.DD.YY-Segments.csv</b> file for a practice and re-run <b>build_dashboard.py</b> to split it.</div>';
 
   /* -------- Special execution -------- */
