@@ -42,10 +42,61 @@ def parse_date(fname):
     return f'20{yy:02d}-{mo:02d}-{d:02d}'
 
 
+TIMELINE_META = {'Timeline', 'Start time', 'Duration', 'Row', 'Instance number', 'Notes', 'Flags'}
+SEGMENT_SLACK = 10  # seconds; stat clips that land in short gaps between segment clips still count
+
+
+def segment_kind(low):
+    return 'scrimmage' if low in SCRIMMAGE_SEGMENTS else 'special' if low in SPECIAL_SEGMENTS else None
+
+
+def parse_timeline(path, fname):
+    """Read a timeline export: one row per tagged clip with start time and duration.
+
+    Each stat appears twice (on the TEAM row and on the player's own row), so only player rows
+    are counted. Stats are assigned to a scrimmage / special segment when their clip starts
+    inside (or within SEGMENT_SLACK of) a clip of that segment.
+    """
+    rows = list(csv.DictReader(open(path, encoding='utf-8-sig')))
+    players, segments, concepts, sets, drills = {}, defaultdict(dict), {}, [], []
+    windows = []
+    for r in rows:
+        label, low = r['Row'].strip(), r['Row'].strip().lower()
+        if low in DRILL_SEGMENTS:
+            if label not in drills:
+                drills.append(label)
+            start = float(r['Start time'])
+            windows.append((segment_kind(low), start, start + float(r['Duration'])))
+        elif low in CONCEPTS:
+            concepts[label] = concepts.get(label, 0) + 1
+        elif not label.startswith('#') and label != 'TEAM' and label not in sets:
+            sets.append(label)
+    for r in rows:
+        player = r['Row'].strip()
+        if not player.startswith('#'):
+            continue
+        t = float(r['Start time'])
+        kinds = {k for k, a, b in windows if k and a - SEGMENT_SLACK <= t < b + SEGMENT_SLACK}
+        for col, v in r.items():
+            if col in TIMELINE_META or not v:
+                continue
+            add(players.setdefault(player, {}), v, 1)
+            for k in kinds:
+                add(segments[k].setdefault(player, {}), v, 1)
+    return {
+        'id': re.sub(r'\W+', '-', fname[:-4]).lower(), 'file': fname, 'type': 'practice',
+        'date': parse_date(fname), 'opponent': None, 'players': players,
+        'segments': {k: v for k, v in segments.items() if v},
+        'concepts': concepts, 'sets': sets, 'drills': drills,
+    }
+
+
 def parse(path):
     fname = os.path.basename(path)
     rows = list(csv.reader(open(path, encoding='utf-8-sig')))
     hdr = rows[0]
+    if hdr and hdr[0].strip() == 'Timeline':
+        return parse_timeline(path, fname)
     players, segments, concepts, sets, drills = {}, defaultdict(dict), {}, [], []
     for r in rows[1:]:
         label = r[0].strip()

@@ -400,7 +400,7 @@
     $('#scrimDesc').textContent = desc+' Click any column to sort.';
   }
   $('#scrimSel').addEventListener('change', renderScrim);
-  $('#scrimNotice').innerHTML = warnIcon+'<div><b>Scrimmage sections are split out for '+(practiceScrimSeg.map(function(e){ return fmtDate(e.date); }).join(', ')||'no practices')+' only.</b> Every practice file has a "Scrimmage" segment tagged, but the export does not cross it with player stats, so the other '+(practices.length-practiceScrimSeg.length)+' practices show whole-practice totals. Add a <b>MM.DD.YY-Segments.csv</b> file for a practice and re-run <b>build_dashboard.py</b> to split it.</div>';
+  $('#scrimNotice').innerHTML = warnIcon+'<div><b>Scrimmage sections are split out for '+(practiceScrimSeg.map(function(e){ return fmtDate(e.date); }).join(', ')||'no practices')+' only.</b> The other '+(practices.length-practiceScrimSeg.length)+' practices show whole-practice totals because their export only has per-player totals. Exporting a practice as a <b>timeline</b> (one row per clip with start time, like Nov 4 and Nov 5) splits it automatically when you re-run <b>build_dashboard.py</b>.</div>';
 
   /* -------- Special situations -------- */
   // Practices that tag a special situations segment; use the exported split when there is one, otherwise whole-practice totals.
